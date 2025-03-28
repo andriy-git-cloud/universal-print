@@ -1,8 +1,44 @@
 #Add printers from a CSV file filled with printer name and IP
 #Printers will be added by using IPP protocol. If needed the printer will be renamed accordingly to CSV
+#Log file will be generated into C:\UP
 #Created by Andrii Zadorozhnyi (andrii.zadorozhnyi@wfp.org)
-#version 1.2
+#version 1.3
 #
+
+
+# Define log file path
+$LogFile = "C:\UP\PrinterScript.log"
+
+# Function to log messages
+function Write-Log {
+    param (
+        [string]$Message,
+        [string]$Level = "INFO"
+    )
+
+    $Timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $LogEntry = "$Timestamp [$Level] $Message"
+	
+	# Choose color based on log level
+    switch ($Level) {
+        "INFO"     { $Color = "White" }
+        "SUCCESS"  { $Color = "Green" }
+        "WARNING"  { $Color = "Yellow" }
+        "ERROR"    { $Color = "Red" }
+        default    { $Color = "Gray" }
+    }
+    
+    # Write to console
+    Write-Host $LogEntry -ForegroundColor $Color
+    
+    # Append to log file
+    Add-Content -Path $LogFile -Value $LogEntry
+}
+
+# Start logging
+Write-Log "Script execution started."
+
+# Record script start time
 $scriptStartTime = Get-Date
 
 # Function to check printer connectivity
@@ -19,13 +55,13 @@ $ImportFile = "C:\UP\PrintersIPP.csv"
 # Import printers from CSV file
 $printers = import-csv $ImportFile -Delimiter ";"
 
-Write-Host "Printers creation... Started" -ForegroundColor Green
+Write-Log "Printers creation... Started" -Level "SUCCESS"
 
 foreach ($printer in $printers) {
-    Write-Host "<--------"
+    Write-Log "<--------"
     $startTime = Get-Date
 	$startTime
-    Write-Host "Adding the printer $($printer.Name)..."
+    Write-Log "Adding the printer $($printer.Name)..."
 
 
     # Add printer and check success
@@ -40,7 +76,7 @@ foreach ($printer in $printers) {
         Add-Printer -Name $printer.Name -IppURL http://$($printer.IP):631/ipp/print -ErrorAction Stop
         $addPrinterSuccess = $true
     } catch {
-        Write-Host "Failed to add printer $($printer.Name), waiting for Event ID 300..." -ForegroundColor Yellow
+        Write-Log "Failed to add printer $($printer.Name), waiting for Event ID 300..." -Level "WARNING"
     
         $maxWaitTime = 90  # Maximum wait time in seconds (1.5 minutes)
         $waitInterval = 5    # Check every 5 seconds
@@ -59,18 +95,18 @@ foreach ($printer in $printers) {
             if ($event) {
                 if ($event.Message -match "Printer\s+(.*?)\s+was created") {
                     $lastAddedPrinter = $matches[1]
-                    Write-Host "Printer '$lastAddedPrinter' was registered after $elapsedTime seconds." -ForegroundColor Green
+                    Write-Log "Printer '$lastAddedPrinter' was registered after $elapsedTime seconds." -Level "SUCCESS"
                     $addPrinterSuccess = $true
                     break  # Exit loop early if the event appears
                 }
             }
 
-            Write-Host "Waiting... ($elapsedTime seconds elapsed)" -ForegroundColor DarkGray
+            Write-Log "Waiting... ($elapsedTime seconds elapsed)"
         }
 
         # If we reach the max wait time and no event was found
         if (-not $addPrinterSuccess) {
-            Write-Host "No Event ID 300 found after $maxWaitTime seconds." -ForegroundColor Red
+            Write-Log "No Event ID 300 found after $maxWaitTime seconds." -Level "ERROR"
         }
     }
 
@@ -90,32 +126,32 @@ foreach ($printer in $printers) {
             # Extract the printer name from the event message
             if ($event.Message -match "Printer\s+(.*?)\s+was created") {
                 $lastAddedPrinter = $matches[1]
-                Write-Host "Last installed printer: '$lastAddedPrinter' at $($event.TimeCreated)" -ForegroundColor Green
+                Write-Log "Last installed printer: '$lastAddedPrinter' at $($event.TimeCreated)" -Level "SUCCESS"
             } else {
-                Write-Host "Could not extract printer name from the event message."
+                Write-Log "Could not extract printer name from the event message."
             }
         } else {
-            Write-Host "No printer installation events found within timeout period." -ForegroundColor Red
+            Write-Log "No printer installation events found within timeout period." -Level "ERROR"
             continue  # Skip renaming step if no event was found
         }
 
-        Write-Host "Printer '$lastAddedPrinter' added - Port: $($printer.IP)"
+        Write-Log "Printer '$lastAddedPrinter' added - Port: $($printer.IP)" -Level "SUCCESS"
 
         # Rename the printer only if necessary
         if ($lastAddedPrinter -ne $printer.Name) {
             Rename-Printer -Name $lastAddedPrinter -NewName $printer.Name
-            Write-Host "Printer renamed from '$lastAddedPrinter' to '$($printer.Name)'" -ForegroundColor Yellow
+            Write-Log "Printer renamed from '$lastAddedPrinter' to '$($printer.Name)'" -Level "INFO"
         }
 
     }
 	} else {
-		Write-Host "Printer $($printer.Name) at $($printer.IP) is unreachable. Skipping installation." -ForegroundColor Red
+		Write-Log "Printer $($printer.Name) at $($printer.IP) is unreachable. Skipping installation." -Level "ERROR"
 	}
-    Write-Host "         ----->"
+    Write-Log "         ----->"
 }
 
-Write-Host "Printers creation... Completed" -ForegroundColor Green
+Write-Log "Printers creation... Completed" -Level "SUCCESS"
 # Record script end time and calculate execution duration
 $scriptEndTime = Get-Date
 $executionTime = $scriptEndTime - $scriptStartTime
-Write-Host "Script execution time: $executionTime" -ForegroundColor Yellow
+Write-Log "Script execution time: $executionTime" -Level "INFO"
