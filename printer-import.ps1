@@ -1,8 +1,19 @@
 #Add printers from a CSV file filled with printer name and IP
 #Printers will be added by using IPP protocol. If needed the printer will be renamed accordingly to CSV
 #Created by Andrii Zadorozhnyi (andrii.zadorozhnyi@wfp.org)
-#version 1.0
+#version 1.3
 #
+$scriptStartTime = Get-Date
+
+# Function to check printer connectivity
+function Test-PrinterConnection {
+    param ([string]$printerIP)
+    
+    $pingResult = Test-Connection -ComputerName $printerIP -Count 4 -Quiet
+    return $pingResult
+}
+
+
 $ImportFile = "C:\UP\PrintersIPP.csv"
 
 # Import printers from CSV file
@@ -20,7 +31,11 @@ foreach ($printer in $printers) {
     # Add printer and check success
 
 
-    $addPrinterSuccess = $false
+	# Ping the printer before adding it
+	if (Test-PrinterConnection -printerIP $printer.IP) {
+		
+
+	$addPrinterSuccess = $false
     try {
         Add-Printer -Name $printer.Name -IppURL http://$($printer.IP):631/ipp/print -ErrorAction Stop
         $addPrinterSuccess = $true
@@ -72,7 +87,6 @@ foreach ($printer in $printers) {
         }
 
         if ($event) {
-        write-host "We are here4"
             # Extract the printer name from the event message
             if ($event.Message -match "Printer\s+(.*?)\s+was created") {
                 $lastAddedPrinter = $matches[1]
@@ -94,7 +108,14 @@ foreach ($printer in $printers) {
         }
 
     }
+	} else {
+		Write-Host "Printer $($printer.Name) at $($printer.IP) is unreachable. Skipping installation." -ForegroundColor Red
+	}
     Write-Host "         ----->"
 }
 
 Write-Host "Printers creation... Completed" -ForegroundColor Green
+# Record script end time and calculate execution duration
+$scriptEndTime = Get-Date
+$executionTime = $scriptEndTime - $scriptStartTime
+Write-Host "Script execution time: $executionTime" -ForegroundColor Yellow
