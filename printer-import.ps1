@@ -1,7 +1,7 @@
 #Add printers from a CSV file filled with printer name and IP
 #Printers will be added by using IPP protocol. If needed the printer will be renamed accordingly to CSV
 #Created by Andrii Zadorozhnyi (andrii.zadorozhnyi@wfp.org)
-#version 1.3
+#version 1.2
 #
 $scriptStartTime = Get-Date
 
