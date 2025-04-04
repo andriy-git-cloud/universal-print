@@ -2,7 +2,7 @@
 #Printers will be added by using IPP protocol. If needed the printer will be renamed accordingly to CSV
 #Log file will be generated into C:\UP
 #Created by Andrii Zadorozhnyi (andrii.zadorozhnyi@wfp.org)
-#version 1.3
+#version 1.4
 #
 
 
@@ -107,6 +107,28 @@ foreach ($printer in $printers) {
         # If we reach the max wait time and no event was found
         if (-not $addPrinterSuccess) {
             Write-Log "No Event ID 300 found after $maxWaitTime seconds." -Level "ERROR"
+<#
+ # {
+            #Then we proceed and will add the printer through TCP/IP Port:
+            try {
+                $portName = $printer.IP
+                $checkPortExists = Get-PrinterPort -Name $portName -ErrorAction SilentlyContinue
+                if (-not $checkPortExists) {
+                    Add-PrinterPort -Name $portName -PrinterHostAddress $portName
+                    Write-Log "TCP/IP Port '$portName' created." -Level "SUCCESS"
+                } else {
+                    Write-Log "TCP/IP Port '$portName' already exists." -Level "ERROR"
+                }
+
+                # Add the printer using the TCP/IP port
+                Add-Printer -Name $printer.Name -DriverName $printer.Driver -PortName $portName
+                Write-Log "Printer '$($printer.Name)' added using TCP/IP Port '$portName'." -Level "SUCCESS"
+            } catch {
+                Write-Log "Failed to add printer using TCP/IP Port: $_" -Level "ERROR"
+            }
+            
+:Enter a comment or description}
+#>
         }
     }
 
