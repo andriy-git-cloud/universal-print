@@ -2,7 +2,7 @@
 #Printers will be added by using IPP protocol. If needed the printer will be renamed accordingly to CSV
 #Log file will be generated into C:\UP
 #Created by Andrii Zadorozhnyi (andrii.zadorozhnyi@wfp.org)
-#version 1.4.1
+#version 1.4.2
 #
 
 
@@ -121,6 +121,7 @@ foreach ($printer in $printers) {
 
                 # Add the printer using the TCP/IP port
                 Add-Printer -Name $printer.Name -DriverName $printer.Driver -PortName $portName
+                $addPrinterSuccess = $true
                 Write-Log "Printer '$($printer.Name)' added using TCP/IP Port '$portName'." -Level "SUCCESS"
             } catch {
                 Write-Log "Failed to add printer using TCP/IP Port: $_" -Level "ERROR"
