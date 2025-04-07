@@ -2,7 +2,7 @@
 #Printers will be added by using IPP protocol. If needed the printer will be renamed accordingly to CSV
 #Log file will be generated into C:\UP
 #Created by Andrii Zadorozhnyi (andrii.zadorozhnyi@wfp.org)
-#version 1.4
+#version 1.4.1
 #
 
 
@@ -78,7 +78,7 @@ foreach ($printer in $printers) {
     } catch {
         Write-Log "Failed to add printer $($printer.Name), waiting for Event ID 300..." -Level "WARNING"
     
-        $maxWaitTime = 90  # Maximum wait time in seconds (1.5 minutes)
+        $maxWaitTime = 60  # Maximum wait time in seconds (1 minute)
         $waitInterval = 5    # Check every 5 seconds
         $elapsedTime = 0
 
@@ -107,8 +107,7 @@ foreach ($printer in $printers) {
         # If we reach the max wait time and no event was found
         if (-not $addPrinterSuccess) {
             Write-Log "No Event ID 300 found after $maxWaitTime seconds." -Level "ERROR"
-<#
- # {
+
             #Then we proceed and will add the printer through TCP/IP Port:
             try {
                 $portName = $printer.IP
@@ -127,8 +126,6 @@ foreach ($printer in $printers) {
                 Write-Log "Failed to add printer using TCP/IP Port: $_" -Level "ERROR"
             }
             
-:Enter a comment or description}
-#>
         }
     }
 
