@@ -1,10 +1,38 @@
-param (
-    [string]$InputFile = "C:\Path\To\Your\AzureUniversalPrint_RequestForm_template.csv",
-    [string]$OutputFile = "C:\Path\To\printers_output.csv"
-)
+# Default input file path
+$defaultInput = "C:\temp\input.csv"
+$inputPrompt = "Enter the full path to the CSV input file [`$defaultInput`]"
 
-# Read the CSV, skipping the first row (example row)
-$csv = Import-Csv -Path $InputFile | Select-Object -Skip 1
+# Read input, use default if blank
+$InputFile = Read-Host $inputPrompt
+if ([string]::IsNullOrWhiteSpace($InputFile)) {
+    $InputFile = $defaultInput
+}
+
+# Check if the file exists
+if (-not (Test-Path $InputFile)) {
+    Write-Host "❌ File not found: $InputFile" -ForegroundColor Red
+    exit
+}
+
+# Default output file path
+$defaultOutput = "C:\temp\printer_output.csv"
+
+# Read input, use default if blank
+$outputPrompt = "Enter the full path where the output CSV should be saved [`$defaultOutput`]"
+$OutputFile = Read-Host $outputPrompt
+if ([string]::IsNullOrWhiteSpace($OutputFile)) {
+    $OutputFile = $defaultOutput
+}
+
+# Ask user if they want to skip the first row
+$skipFirst = Read-Host "Do you want to skip the first row (e.g. example row)? [Y/N]"
+
+# Import CSV accordingly
+if ($skipFirst -match '^[Yy]') {
+    $csv = Import-Csv -Path $InputFile | Select-Object -Skip 1
+} else {
+    $csv = Import-Csv -Path $InputFile
+}
 
 # Mapping logic for driver based on model keywords
 function Get-PrinterDriver($model) {
@@ -35,4 +63,4 @@ $printers = foreach ($row in $csv) {
 # Export to CSV with semicolon delimiter
 $printers | Export-Csv -Path $OutputFile -NoTypeInformation -Delimiter ';'
 
-Write-Host "CSV created at: $OutputFile"
+Write-Host "`n✅ CSV created at: $OutputFile"
