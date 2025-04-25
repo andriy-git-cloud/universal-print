@@ -1,6 +1,6 @@
 # Default input file path
 $defaultInput = "C:\temp\input.csv"
-$inputPrompt = "Enter the full path to the CSV input file [`$defaultInput`]"
+$inputPrompt = "Enter the full path to the CSV input file [$defaultInput]"
 
 # Read input, use default if blank
 $InputFile = Read-Host $inputPrompt
@@ -18,7 +18,7 @@ if (-not (Test-Path $InputFile)) {
 $defaultOutput = "C:\temp\printer_output.csv"
 
 # Read input, use default if blank
-$outputPrompt = "Enter the full path where the output CSV should be saved [`$defaultOutput`]"
+$outputPrompt = "Enter the full path where the output CSV should be saved [$defaultOutput]"
 $OutputFile = Read-Host $outputPrompt
 if ([string]::IsNullOrWhiteSpace($OutputFile)) {
     $OutputFile = $defaultOutput
