@@ -2,7 +2,7 @@
 #Printers will be added by using IPP protocol. If needed the printer will be renamed accordingly to CSV
 #Log file will be generated into C:\UP
 #Created by Andrii Zadorozhnyi (andrii.zadorozhnyi@wfp.org)
-#version 1.4.2
+#version 1.5
 #
 
 
@@ -60,7 +60,6 @@ Write-Log "Printers creation... Started" -Level "SUCCESS"
 foreach ($printer in $printers) {
     Write-Log "<--------"
     $startTime = Get-Date
-	$startTime
     Write-Log "Adding the printer $($printer.Name)..."
 
 
@@ -97,6 +96,7 @@ foreach ($printer in $printers) {
                     $lastAddedPrinter = $matches[1]
                     Write-Log "Printer '$lastAddedPrinter' was registered after $elapsedTime seconds." -Level "SUCCESS"
                     $addPrinterSuccess = $true
+                    $PrinterTCP = $false
                     break  # Exit loop early if the event appears
                 }
             }
@@ -123,6 +123,7 @@ foreach ($printer in $printers) {
                 Add-Printer -Name $printer.Name -DriverName $printer.Driver -PortName $portName
                 $addPrinterSuccess = $true
                 Write-Log "Printer '$($printer.Name)' added using TCP/IP Port '$portName'." -Level "SUCCESS"
+                $PrinterTCP = $true
             } catch {
                 Write-Log "Failed to add printer using TCP/IP Port: $_" -Level "ERROR"
             }
@@ -156,6 +157,16 @@ foreach ($printer in $printers) {
         }
 
         Write-Log "Printer '$lastAddedPrinter' added - Port: $($printer.IP)" -Level "SUCCESS"
+
+        #Change the Printer Driver
+        if (-not $PrinterTCP) {
+            try {
+                Set-Printer -Name $lastAddedPrinter -DriverName $printer.Driver
+                Write-Log "Printer driver changed to '$($printer.Driver)' for '$lastAddedPrinter'." -Level "SUCCESS"
+            } catch {
+                Write-Log "Failed to change printer driver: $_" -Level "ERROR"
+            }
+        }
 
         # Rename the printer only if necessary
         if ($lastAddedPrinter -ne $printer.Name) {
