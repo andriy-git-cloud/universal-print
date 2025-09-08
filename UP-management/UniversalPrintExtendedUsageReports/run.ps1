@@ -1,50 +1,75 @@
+Param (
+    $Timer, $TriggerMetadata
+    # Date should be in this format: 2020-09-01
+    # Default is the first day of the previous month at 00:00:00 (Tenant time zone)
+    #$StartDate = "",
+    # Date should be in this format: 2020-09-30
+    # Default is the last day of the previous month 23:59:59 (Tenant time zone)
+    #$EndDate = "",
+    # Set if only the Printer report should be generated
+    #[switch]$PrinterOnly,
+    # Set if only the User report should be generated
+    #[switch]$UserOnly
+)
+
 # Description: This script connects to Microsoft Graph using the Universal Print API and retrieves extended usage reports for printers.
 
 $tenantId     = $env:TenantId
 $clientId     = $env:ClientId
 $clientSecret = $env:ClientSecret
 $StorageAccountName   = $env:STORAGE_ACCOUNT_NAME
-$ResourceGroupName    = $env:RESOURCE_GROUP_NAME
+#$ResourceGroupName    = $env:RESOURCE_GROUP_NAME
 $ContainerName        = $env:STORAGE_CONTAINER_NAME  # e.g., "print-exports"
 
 $secureSecret = ConvertTo-SecureString -String $clientSecret -AsPlainText -Force
 $cred = New-Object System.Management.Automation.PSCredential($clientId, $secureSecret)
 
-Param (
-    # Date should be in this format: 2020-09-01
-    # Default is the first day of the previous month at 00:00:00 (Tenant time zone)
-    #$StartDate = "",
-    # Date should be in this format: 2020-09-30
-    # Default is the last day of the previous month 23:59:59 (Tenant time zone)
-    $EndDate = "",
-    # Set if only the Printer report should be generated
-    [switch]$PrinterOnly,
-    # Set if only the User report should be generated
-    [switch]$UserOnly
-)
-
 #############################
-# INSTALL & IMPORT MODULES
+# IMPORT MODULES
 #############################
 
-Import-Module Microsoft.Graph.Reports
+Import-Module Microsoft.Graph.Reports -ErrorAction Stop
+Import-Module Az.Accounts  -ErrorAction Stop
+Import-Module Az.Storage   -ErrorAction Stop
 
-#############################
-# SET DATE RANGE
-#############################
-if ($StartDate -eq "") {
-    $StartDate = (Get-Date -Day 1).AddMonths(-1).ToString("yyyy-MM-ddT00:00:00Z")
+# -----------------------------
+# SET DATE RANGE (null-safe)
+# -----------------------------
+# Optional overrides via App Settings:
+#   START_DATE = 2025-08-01
+#   END_DATE   = 2025-08-31
+$StartDateRaw = if ($env:START_DATE) { $env:START_DATE } else { $StartDate }
+$EndDateRaw   = if ($env:END_DATE)   { $env:END_DATE }   else { $EndDate   }
+
+function Get-PrevMonthStartIsoUtc { (Get-Date -Day 1).AddMonths(-1).ToString('yyyy-MM-ddT00:00:00Z') }
+function Get-PrevMonthEndIsoUtc   { (Get-Date -Day 1).AddDays(-1).ToString('yyyy-MM-ddT23:59:59Z') }
+
+# START
+if ([string]::IsNullOrWhiteSpace($StartDateRaw)) {
+    $StartDateIso = Get-PrevMonthStartIsoUtc
 } else {
-    $StartDate = ([DateTime]$StartDate).ToString("yyyy-MM-ddT00:00:00Z")
+    try {
+        $sd = Get-Date -Date $StartDateRaw -ErrorAction Stop
+        $StartDateIso = $sd.ToString('yyyy-MM-ddT00:00:00Z')
+    } catch {
+        throw "Invalid START_DATE value '$StartDateRaw'. Expected e.g. 2025-08-01"
+    }
 }
 
-if ($EndDate -eq "") {
-    $EndDate = (Get-Date -Day 1).AddDays(-1).ToString("yyyy-MM-ddT23:59:59Z")
+# END
+if ([string]::IsNullOrWhiteSpace($EndDateRaw)) {
+    $EndDateIso = Get-PrevMonthEndIsoUtc
 } else {
-    $EndDate = ([DateTime]$EndDate).ToString("yyyy-MM-ddT23:59:59Z")
+    try {
+        $ed = Get-Date -Date $EndDateRaw -ErrorAction Stop
+        $EndDateIso = $ed.ToString('yyyy-MM-ddT23:59:59Z')
+    } catch {
+        throw "Invalid END_DATE value '$EndDateRaw'. Expected e.g. 2025-08-31"
+    }
 }
 
-Write-Output "Gathering reports between $StartDate and $EndDate."
+Write-Host "Gathering reports between $StartDateIso and $EndDateIso."
+
 
 # Label for filenames: the month we are reporting (previous month)
 $monthLabel = (Get-Date -Day 1).AddMonths(-1).ToString('yyyy-MM')
@@ -59,6 +84,8 @@ $userCsv    = Join-Path $env:TMP ("userReport_{0}.csv" -f $monthLabel)
 
 # These scopes are needed to get the list of users, list of printers, and to read the reporting data.
 Connect-MgGraph -ClientSecretCredential $cred -TenantId $tenantId #-Scopes "Directory.AccessAsUser.All", "Printer.Read.All"
+Connect-AzAccount -ServicePrincipal -Tenant $tenantId -Credential $cred | Out-Null
+
 
 ##########################
 # GET PRINTER REPORT
@@ -69,7 +96,8 @@ if (!$UserOnly)
     Write-Progress -Activity "Gathering Printer usage..." -PercentComplete -1
 
 # Get the printer usage report
-    $printerReport = Get-MgReportMonthlyPrintUsageByPrinter -All -Filter "completedJobCount gt 0 and usageDate ge $StartDate and usageDate lt $EndDate"
+    $printerReport = Get-MgReportMonthlyPrintUsageByPrinter -All -Filter "completedJobCount gt 0 and usageDate ge $StartDateIso and usageDate lt $EndDateIso"
+
 
 ## Join extended printer info with the printer usage report
     $reportWithPrinterNames = $printerReport | 
@@ -97,7 +125,8 @@ if (!$PrinterOnly)
     Write-Progress -Activity "Gathering User usage..." -PercentComplete -1
 
 # Get the user usage report
-    $userReport = Get-MgReportMonthlyPrintUsageByUser -All -Filter "completedJobCount gt 0 and usageDate ge $StartDate and usageDate lt $EndDate"
+    $userReport = Get-MgReportMonthlyPrintUsageByUser -All -Filter "completedJobCount gt 0 and usageDate ge $StartDateIso and usageDate lt $EndDateIso"
+
     $reportWithUserInfo = $userReport | 
         Select-Object ( 
             @{Name = "UsageMonth"; Expression = {$_.Id.Substring(0,8)}}, 
@@ -115,8 +144,10 @@ if (!$PrinterOnly)
 # -----------------------------
 # UPLOAD TO BLOB STORAGE
 # -----------------------------
-$sa = Get-AzStorageAccount -Name $StorageAccountName -ResourceGroupName $ResourceGroupName
-$ctx = $sa.Context
+
+# Use the currently connected SP for AAD-auth to Blob
+$ctx = New-AzStorageContext -StorageAccountName $storageAccountName -UseConnectedAccount
+
 
 if (Test-Path $printerCsv) {
     $printerBlobPath = (Split-Path $printerCsv -Leaf)
